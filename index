@@ -347,4 +347,335 @@
                 options: template.options ? [...template.options] : [],
                 value: type === 'heading' ? '标题文本' : '',
             };
-            if (index !== undefined) fields
+            if (index !== undefined) fields.splice(index, 0, field);
+            else fields.push(field);
+            selectedFieldId = field.id;
+            renderForm();
+            renderProps();
+        }
+
+        function deleteField(id) {
+            fields = fields.filter(f => f.id !== id);
+            if (selectedFieldId === id) selectedFieldId = null;
+            renderForm();
+            renderProps();
+        }
+
+        function selectField(id) {
+            selectedFieldId = id;
+            renderForm();
+            renderProps();
+        }
+
+        // ========== 渲染表单 ==========
+        function renderForm() {
+            const zone = document.getElementById('dropZone');
+            const emptyHint = document.getElementById('emptyHint');
+
+            if (fields.length === 0) {
+                emptyHint.style.display = 'flex';
+                zone.innerHTML = '';
+                zone.appendChild(emptyHint);
+                return;
+            }
+
+            zone.innerHTML = fields.map((f, i) => {
+                const selected = f.id === selectedFieldId ? 'selected' : '';
+                let preview = '';
+
+                switch (f.type) {
+                    case 'text': case 'email': case 'number': case 'phone':
+                        preview = `<input class="field-preview" type="${f.type === 'phone' ? 'tel' : f.type}" placeholder="${f.placeholder}" disabled>`;
+                        break;
+                    case 'textarea':
+                        preview = `<textarea class="field-preview field-preview-textarea" placeholder="${f.placeholder}" disabled></textarea>`;
+                        break;
+                    case 'select':
+                        preview = `<select class="field-preview field-preview-select" disabled>${f.options.map(o => `<option>${o}</option>`).join('')}</select>`;
+                        break;
+                    case 'radio':
+                        preview = `<div class="field-preview-checkbox">${f.options.map(o => `<label><input type="radio" name="r_${f.id}" disabled> ${o}</label>`).join('')}</div>`;
+                        break;
+                    case 'checkbox':
+                        preview = `<div class="field-preview-checkbox">${f.options.map(o => `<label><input type="checkbox" disabled> ${o}</label>`).join('')}</div>`;
+                        break;
+                    case 'date':
+                        preview = `<input class="field-preview" type="date" disabled>`;
+                        break;
+                    case 'time':
+                        preview = `<input class="field-preview" type="time" disabled>`;
+                        break;
+                    case 'file':
+                        preview = `<input class="field-preview" type="file" disabled>`;
+                        break;
+                    case 'rating':
+                        preview = `<div style="font-size:24px;color:#fbbf24;">★★★★★</div>`;
+                        break;
+                    case 'divider':
+                        return `<div class="form-field ${selected}" onclick="selectField('${f.id}')">
+                            <hr style="border:none;border-top:1px solid #1c2333;margin:10px 0;">
+                            <button class="field-delete" onclick="event.stopPropagation();deleteField('${f.id}')">✕</button>
+                        </div>`;
+                    case 'heading':
+                        return `<div class="form-field ${selected}" onclick="selectField('${f.id}')">
+                            <h3 style="color:#aab4c8;font-size:16px;">${f.value || '标题文本'}</h3>
+                            <button class="field-delete" onclick="event.stopPropagation();deleteField('${f.id}')">✕</button>
+                        </div>`;
+                }
+
+                return `<div class="form-field ${selected}" onclick="selectField('${f.id}')" draggable="true"
+                    ondragstart="startFieldDrag(event,'${f.id}')" ondragover="fieldDragOver(event,${i})" ondrop="fieldDrop(event,${i})">
+                    <span class="field-drag">⋮⋮</span>
+                    <div class="field-label">${f.label}${f.required ? '<span class="field-required">*</span>' : ''}</div>
+                    ${preview}
+                    <button class="field-delete" onclick="event.stopPropagation();deleteField('${f.id}')">✕</button>
+                </div>`;
+            }).join('');
+        }
+
+        // ========== 拖拽排序 ==========
+        let dragFieldId = null;
+        function startFieldDrag(e, id) { dragFieldId = id; }
+        function fieldDragOver(e, idx) { e.preventDefault(); }
+        function fieldDrop(e, idx) {
+            e.preventDefault();
+            if (dragFieldId) {
+                const fi = fields.findIndex(f => f.id === dragFieldId);
+                if (fi > -1) {
+                    const [moved] = fields.splice(fi, 1);
+                    fields.splice(idx, 0, moved);
+                    renderForm();
+                }
+                dragFieldId = null;
+            }
+        }
+
+        // Drop zone 事件
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (dragFieldType) { addField(dragFieldType); dragFieldType = null; }
+        });
+
+        // ========== 属性面板 ==========
+        function renderProps() {
+            const content = document.getElementById('propsContent');
+            if (!selectedFieldId) {
+                content.innerHTML = '<div class="pp-empty">👈 选择一个字段以编辑属性</div>';
+                return;
+            }
+            const field = fields.find(f => f.id === selectedFieldId);
+            if (!field) return;
+
+            let html = '';
+
+            if (field.type !== 'divider') {
+                if (field.type === 'heading') {
+                    html += `<div class="pp-group">
+                        <div class="pp-label">标题内容</div>
+                        <input class="pp-input" value="${escHtml(field.value)}" oninput="updateField('value',this.value)">
+                    </div>`;
+                } else {
+                    html += `<div class="pp-group">
+                        <div class="pp-label">字段标签</div>
+                        <input class="pp-input" value="${escHtml(field.label)}" oninput="updateField('label',this.value)">
+                    </div>`;
+
+                    if (['text','textarea','email','number','phone'].includes(field.type)) {
+                        html += `<div class="pp-group">
+                            <div class="pp-label">占位文本</div>
+                            <input class="pp-input" value="${escHtml(field.placeholder)}" oninput="updateField('placeholder',this.value)">
+                        </div>`;
+                    }
+
+                    html += `<div class="pp-group">
+                        <div class="pp-checkbox-row">
+                            <input type="checkbox" id="reqCheck" ${field.required ? 'checked' : ''} onchange="updateField('required',this.checked)">
+                            <label for="reqCheck">必填字段</label>
+                        </div>
+                    </div>`;
+                }
+            }
+
+            if (['select','radio','checkbox'].includes(field.type)) {
+                html += `<div class="pp-group">
+                    <div class="pp-label">选项列表</div>
+                    <div class="pp-options-list">
+                        ${field.options.map((opt, i) =>
+                            `<div class="pp-option-row">
+                                <input class="pp-option-input" value="${escHtml(opt)}" oninput="updateOption(${i},this.value)">
+                                <button class="pp-option-del" onclick="removeOption(${i})">✕</button>
+                            </div>`
+                        ).join('')}
+                    </div>
+                    <button class="pp-add-option" onclick="addOption()">＋ 添加选项</button>
+                </div>`;
+            }
+
+            html += `<div class="pp-group" style="margin-top:20px;">
+                <div class="pp-label">字段类型</div>
+                <div style="font-size:13px;color:#6b7e99;">${FIELD_TYPES.find(t=>t.type===field.type)?.icon} ${FIELD_TYPES.find(t=>t.type===field.type)?.name}</div>
+            </div>`;
+
+            content.innerHTML = html;
+        }
+
+        function updateField(key, value) {
+            const field = fields.find(f => f.id === selectedFieldId);
+            if (field) { field[key] = value; renderForm(); }
+        }
+        function updateOption(idx, value) {
+            const field = fields.find(f => f.id === selectedFieldId);
+            if (field) { field.options[idx] = value; renderForm(); }
+        }
+        function addOption() {
+            const field = fields.find(f => f.id === selectedFieldId);
+            if (field) { field.options.push(`选项 ${field.options.length + 1}`); renderForm(); renderProps(); }
+        }
+        function removeOption(idx) {
+            const field = fields.find(f => f.id === selectedFieldId);
+            if (field && field.options.length > 1) { field.options.splice(idx, 1); renderForm(); renderProps(); }
+        }
+
+        // ========== 导出代码 ==========
+        function generateHTML() {
+            const title = document.getElementById('formTitle').value;
+            const desc = document.getElementById('formDesc').value;
+            let html = `<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n  <meta charset="UTF-8">\n  <title>${escHtml(title)}</title>\n  <style>\n    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }\n    h1 { margin-bottom: 4px; }\n    p.desc { color: #666; margin-bottom: 24px; }\n    .field { margin-bottom: 18px; }\n    label { display: block; font-weight: 600; margin-bottom: 6px; }\n    input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }\n    textarea { min-height: 80px; resize: vertical; }\n    .required { color: red; }\n    .options label { display: inline-flex; align-items: center; gap: 4px; margin-right: 16px; font-weight: normal; }\n    button[type="submit"] { padding: 12px 30px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }\n  </style>\n</head>\n<body>\n  <h1>${escHtml(title)}</h1>\n  <p class="desc">${escHtml(desc)}</p>\n  <form>\n`;
+
+            fields.forEach(f => {
+                const req = f.required ? ' required' : '';
+                const reqMark = f.required ? '<span class="required">*</span>' : '';
+
+                switch (f.type) {
+                    case 'text': case 'email': case 'number': case 'phone':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <input type="${f.type === 'phone' ? 'tel' : f.type}" placeholder="${escHtml(f.placeholder)}"${req}>\n    </div>\n`;
+                        break;
+                    case 'textarea':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <textarea placeholder="${escHtml(f.placeholder)}"${req}></textarea>\n    </div>\n`;
+                        break;
+                    case 'select':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <select${req}>\n        <option value="">请选择...</option>\n${f.options.map(o => `        <option>${escHtml(o)}</option>`).join('\n')}\n      </select>\n    </div>\n`;
+                        break;
+                    case 'radio':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <div class="options">\n${f.options.map(o => `        <label><input type="radio" name="${f.id}"${req}> ${escHtml(o)}</label>`).join('\n')}\n      </div>\n    </div>\n`;
+                        break;
+                    case 'checkbox':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <div class="options">\n${f.options.map(o => `        <label><input type="checkbox"> ${escHtml(o)}</label>`).join('\n')}\n      </div>\n    </div>\n`;
+                        break;
+                    case 'date':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <input type="date"${req}>\n    </div>\n`;
+                        break;
+                    case 'time':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <input type="time"${req}>\n    </div>\n`;
+                        break;
+                    case 'file':
+                        html += `    <div class="field">\n      <label>${escHtml(f.label)}${reqMark}</label>\n      <input type="file"${req}>\n    </div>\n`;
+                        break;
+                    case 'divider':
+                        html += `    <hr style="margin:20px 0;border:none;border-top:1px solid #eee;">\n`;
+                        break;
+                    case 'heading':
+                        html += `    <h3>${escHtml(f.value)}</h3>\n`;
+                        break;
+                }
+            });
+
+            html += `    <button type="submit">提交</button>\n  </form>\n</body>\n</html>`;
+            return html;
+        }
+
+        function showCode() {
+            document.getElementById('codeOutput').textContent = generateHTML();
+            document.getElementById('codeModal').classList.add('show');
+        }
+        function closeModal() { document.getElementById('codeModal').classList.remove('show'); }
+        function copyCode() {
+            navigator.clipboard.writeText(generateHTML()).then(() => showToast('📋 代码已复制'));
+        }
+        function downloadCode() {
+            const blob = new Blob([generateHTML()], { type: 'text/html' });
+            const a = document.createElement('a');
+            a.download = 'form.html';
+            a.href = URL.createObjectURL(blob);
+            a.click();
+            showToast('💾 已下载');
+        }
+
+        function previewForm() {
+            const w = window.open('', '_blank');
+            w.document.write(generateHTML());
+            w.document.close();
+        }
+
+        // ========== 保存/导入导出 ==========
+        function saveForm() {
+            const data = { title: document.getElementById('formTitle').value, desc: document.getElementById('formDesc').value, fields };
+            localStorage.setItem('formforge_data', JSON.stringify(data));
+            showToast('💾 表单已保存');
+        }
+        function loadForm() {
+            const s = localStorage.getItem('formforge_data');
+            if (s) {
+                const data = JSON.parse(s);
+                document.getElementById('formTitle').value = data.title || '';
+                document.getElementById('formDesc').value = data.desc || '';
+                fields = data.fields || [];
+            }
+        }
+        function exportJSON() {
+            const data = { title: document.getElementById('formTitle').value, desc: document.getElementById('formDesc').value, fields };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.download = 'form-config.json';
+            a.href = URL.createObjectURL(blob);
+            a.click();
+            showToast('📦 JSON 已导出');
+        }
+        function importJSON() {
+            const input = document.createElement('input');
+            input.type = 'file'; input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const data = JSON.parse(ev.target.result);
+                        document.getElementById('formTitle').value = data.title || '';
+                        document.getElementById('formDesc').value = data.desc || '';
+                        fields = data.fields || [];
+                        renderForm(); renderProps();
+                        showToast('📂 已导入');
+                    } catch { showToast('❌ 无效的 JSON'); }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+        function clearForm() {
+            if (!confirm('确定清空所有字段？')) return;
+            fields = []; selectedFieldId = null;
+            renderForm(); renderProps();
+            showToast('🗑 已清空');
+        }
+
+        // ========== 工具 ==========
+        function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2200);
+        }
+
+        // ========== 初始化 ==========
+        loadForm();
+        renderComponents();
+        renderForm();
+        renderProps();
+    </script>
+</body>
+</html>
