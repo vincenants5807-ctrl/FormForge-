@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FormForge - 可视化表单构建器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #0b0e14;
+            color: #c8d0dc;
+            height: 100vh; display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        header {
+            background: #10141d;
+            border-bottom: 1px solid #1c2333;
+            padding: 8px 16px;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-shrink: 0;
+        }
+        .logo { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .logo span { background: linear-gradient(135deg, #f472b6, #fb923c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header-btns { display: flex; gap: 4px; }
+        .hb {
+            padding: 6px 14px; background: #1c2333;
+            border: 1px solid #2a3545; color: #6b7e99;
+            border-radius: 6px; cursor: pointer; font-size: 11px; transition: 0.2s;
+        }
+        .hb:hover { background: #2a3545; color: white; }
+        .hb.primary { background: #f472b6; color: white; border-color: #f472b6; }
+
+        .main { flex: 1; display: flex; overflow: hidden; }
+
+        /* 左侧组件面板 */
+        .components-panel {
+            width: 240px; background: #10141d;
+            border-right: 1px solid #1c2333;
+            display: flex; flex-direction: column;
+            flex-shrink: 0; overflow-y: auto;
+        }
+        .cp-title {
+            padding: 14px 16px;
+            font-size: 12px; font-weight: 600;
+            color: #3d5070; text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #1c2333;
+        }
+        .cp-list { padding: 8px; }
+        .cp-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: grab; transition: 0.15s;
+            margin-bottom: 2px;
+        }
+        .cp-item:hover { background: #1c2333; }
+        .cp-item:active { cursor: grabbing; background: #243044; }
+        .cp-icon { font-size: 18px; width: 28px; text-align: center; }
+        .cp-name { font-size: 13px; color: #8899b4; }
+
+        /* 中间画布 */
+        .canvas-area {
+            flex: 1; overflow-y: auto;
+            background: #080b10;
+            padding: 30px;
+            display: flex; justify-content: center;
+        }
+        .form-canvas {
+            width: 100%; max-width: 640px;
+            background: #10141d;
+            border: 1px solid #1c2333;
+            border-radius: 16px;
+            padding: 32px;
+            min-height: 400px;
+        }
+        .form-title-editable {
+            font-size: 24px; font-weight: 800;
+            margin-bottom: 6px;
+            outline: none; color: #e8ecf2;
+            border: none; background: transparent;
+            width: 100%;
+        }
+        .form-desc-editable {
+            font-size: 14px; color: #4d6080;
+            margin-bottom: 24px;
+            outline: none; border: none; background: transparent;
+            width: 100%;
+        }
+
+        .drop-zone {
+            min-height: 100px;
+            border: 2px dashed #1c2333;
+            border-radius: 12px;
+            display: flex; flex-direction: column;
+            transition: 0.2s;
+        }
+        .drop-zone.dragover { border-color: #f472b6; background: #f472b608; }
+        .drop-zone-empty {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            color: #1c2333; font-size: 14px; padding: 30px;
+        }
+
+        .form-field {
+            padding: 14px 16px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            margin-bottom: 4px;
+            transition: 0.15s;
+            position: relative;
+            cursor: pointer;
+        }
+        .form-field:hover { border-color: #1c2333; background: rgba(255,255,255,0.01); }
+        .form-field.selected { border-color: #f472b6; background: #f472b608; }
+        .field-label { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #aab4c8; }
+        .field-required { color: #f472b6; margin-left: 2px; }
+        .field-preview {
+            width: 100%; padding: 10px 14px;
+            background: #080b10; border: 1px solid #1c2333;
+            border-radius: 8px; color: #4d6080;
+            font-size: 13px;
+        }
+        .field-preview-textarea { min-height: 70px; resize: none; }
+        .field-preview-select { appearance: none; cursor: pointer; }
+        .field-preview-checkbox { display: flex; gap: 12px; flex-wrap: wrap; }
+        .field-preview-checkbox label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #6b7e99; cursor: pointer; }
+        .field-preview-checkbox input { accent-color: #f472b6; }
+        .field-delete {
+            position: absolute; top: 8px; right: 8px;
+            background: none; border: none;
+            color: #2a3545; cursor: pointer; font-size: 14px;
+            opacity: 0; transition: 0.15s;
+        }
+        .form-field:hover .field-delete { opacity: 1; }
+        .field-delete:hover { color: #ef4444; }
+        .field-drag {
+            position: absolute; top: 8px; left: 8px;
+            color: #1c2333; font-size: 12px;
+            cursor: grab; opacity: 0; transition: 0.15s;
+        }
+        .form-field:hover .field-drag { opacity: 1; }
+
+        /* 右侧属性面板 */
+        .props-panel {
+            width: 280px; background: #10141d;
+            border-left: 1px solid #1c2333;
+            flex-shrink: 0; overflow-y: auto;
+            padding: 16px;
+        }
+        .pp-title {
+            font-size: 12px; font-weight: 600;
+            color: #3d5070; text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 14px;
+        }
+        .pp-empty { color: #1c2333; font-size: 13px; text-align: center; padding: 30px 10px; }
+        .pp-group { margin-bottom: 16px; }
+        .pp-label { font-size: 11px; color: #3d5070; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; }
+        .pp-input {
+            width: 100%; padding: 8px 12px;
+            background: #080b10; border: 1px solid #1c2333;
+            color: #c8d0dc; border-radius: 8px;
+            font-size: 13px; outline: none;
+        }
+        .pp-input:focus { border-color: #f472b6; }
+        .pp-checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .pp-checkbox-row input { accent-color: #f472b6; }
+        .pp-checkbox-row label { font-size: 12px; color: #6b7e99; }
+        .pp-options-list { display: flex; flex-direction: column; gap: 4px; }
+        .pp-option-row { display: flex; gap: 4px; }
+        .pp-option-input {
+            flex: 1; padding: 6px 10px;
+            background: #080b10; border: 1px solid #1c2333;
+            color: #c8d0dc; border-radius: 6px; font-size: 12px; outline: none;
+        }
+        .pp-option-del {
+            background: none; border: none; color: #2a3545;
+            cursor: pointer; font-size: 14px;
+        }
+        .pp-option-del:hover { color: #ef4444; }
+        .pp-add-option {
+            padding: 6px; background: transparent;
+            border: 1px dashed #1c2333; color: #3d5070;
+            border-radius: 6px; cursor: pointer; font-size: 11px;
+            width: 100%; margin-top: 4px; transition: 0.15s;
+        }
+        .pp-add-option:hover { border-color: #3d5070; color: #6b7e99; }
+
+        /* 代码预览弹窗 */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: #10141d;
+            border: 1px solid #1c2333;
+            border-radius: 20px;
+            width: 90%; max-width: 700px;
+            max-height: 80vh;
+            display: flex; flex-direction: column;
+        }
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #1c2333;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-header h3 { font-size: 16px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: #4d6080; cursor: pointer; font-size: 20px; }
+        .modal-body {
+            flex: 1; overflow-y: auto; padding: 20px;
+        }
+        .modal-code {
+            background: #080b10;
+            border-radius: 12px;
+            padding: 18px;
+            font-family: 'Fira Code', monospace;
+            font-size: 12px; line-height: 1.6;
+            color: #a0aec0;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .modal-footer {
+            padding: 12px 20px;
+            border-top: 1px solid #1c2333;
+            display: flex; gap: 6px; justify-content: flex-end;
+        }
+
+        .toast {
+            position: fixed; bottom: 30px; left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #10141d; border: 1px solid #1c2333;
+            color: white; padding: 10px 24px; border-radius: 12px;
+            font-size: 13px; opacity: 0; transition: 0.3s; z-index: 200;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">📋 Form<span>Forge</span></div>
+        <div class="header-btns">
+            <button class="hb" onclick="previewForm()">👁 预览</button>
+            <button class="hb" onclick="showCode()">💻 导出代码</button>
+            <button class="hb" onclick="exportJSON()">📦 JSON</button>
+            <button class="hb" onclick="importJSON()">📂 导入</button>
+            <button class="hb" onclick="clearForm()">🗑 清空</button>
+            <button class="hb primary" onclick="saveForm()">💾 保存</button>
+        </div>
+    </header>
+
+    <div class="main">
+        <!-- 组件面板 -->
+        <div class="components-panel">
+            <div class="cp-title">📦 表单组件</div>
+            <div class="cp-list" id="cpList"></div>
+        </div>
+
+        <!-- 画布 -->
+        <div class="canvas-area">
+            <div class="form-canvas">
+                <input class="form-title-editable" id="formTitle" value="我的表单" placeholder="表单标题">
+                <input class="form-desc-editable" id="formDesc" value="请填写以下信息" placeholder="表单描述">
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-zone-empty" id="emptyHint">
+                        ← 从左侧拖入组件，或点击添加
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 属性面板 -->
+        <div class="props-panel">
+            <div class="pp-title">⚙️ 字段属性</div>
+            <div id="propsContent">
+                <div class="pp-empty">👈 选择一个字段以编辑属性</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 代码弹窗 -->
+    <div class="modal-overlay" id="codeModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>💻 导出 HTML 代码</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-code" id="codeOutput"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="hb" onclick="copyCode()">📋 复制代码</button>
+                <button class="hb" onclick="downloadCode()">💾 下载 HTML</button>
+                <button class="hb" onclick="closeModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ========== 组件定义 ==========
+        const FIELD_TYPES = [
+            { type: 'text',     icon: '📝', name: '单行文本', placeholder: '请输入...' },
+            { type: 'textarea', icon: '📄', name: '多行文本', placeholder: '请输入详细内容...' },
+            { type: 'email',    icon: '📧', name: '邮箱', placeholder: 'example@mail.com' },
+            { type: 'number',   icon: '🔢', name: '数字', placeholder: '0' },
+            { type: 'phone',    icon: '📱', name: '手机号', placeholder: '13812345678' },
+            { type: 'select',   icon: '📋', name: '下拉选择', options: ['选项 1','选项 2','选项 3'] },
+            { type: 'radio',    icon: '🔘', name: '单选按钮', options: ['选项 A','选项 B','选项 C'] },
+            { type: 'checkbox', icon: '☑️', name: '复选框', options: ['选项 1','选项 2','选项 3'] },
+            { type: 'date',     icon: '📅', name: '日期', placeholder: '' },
+            { type: 'time',     icon: '⏰', name: '时间', placeholder: '' },
+            { type: 'file',     icon: '📎', name: '文件上传', placeholder: '' },
+            { type: 'rating',   icon: '⭐', name: '评分', placeholder: '' },
+            { type: 'divider',  icon: '➖', name: '分割线', placeholder: '' },
+            { type: 'heading',  icon: '🔤', name: '标题文字', placeholder: '' },
+        ];
+
+        let fields = [];
+        let selectedFieldId = null;
+        let dragFieldType = null;
+
+        // ========== 渲染组件面板 ==========
+        function renderComponents() {
+            document.getElementById('cpList').innerHTML = FIELD_TYPES.map(ft =>
+                `<div class="cp-item" draggable="true"
+                    ondragstart="dragFieldType='${ft.type}'"
+                    onclick="addField('${ft.type}')">
+                    <span class="cp-icon">${ft.icon}</span>
+                    <span class="cp-name">${ft.name}</span>
+                </div>`
+            ).join('');
+        }
+
+        // ========== 字段操作 ==========
+        function addField(type, index) {
+            const template = FIELD_TYPES.find(f => f.type === type);
+            const field = {
+                id: 'f_' + Date.now() + Math.random().toString(36).substr(2,4),
+                type,
+                label: template.name,
+                placeholder: template.placeholder || '',
+                required: false,
+                options: template.options ? [...template.options] : [],
+                value: type === 'heading' ? '标题文本' : '',
+            };
+            if (index !== undefined) fields
